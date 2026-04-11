@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Sync Cursor/Codex assets between global dirs and the my-tools git repo.
+# Sync skills, rules, and agents between global dirs and the my-tools git repo.
 # Usage:
-#   cursor-asset-sync.sh to-repo --src PATH [--under REL] [--bucket auto|skills|archived|rules|agents] [--commit MSG] [--push] [--keep-source]
-#   cursor-asset-sync.sh from-repo --src REPO_SUBPATH [--dest DIR] [--commit MSG] [--push] [--delete-repo-copy]
+#   asset-sync.sh to-repo --src PATH [--under REL] [--bucket auto|skills|dotagents-skills|archived|rules|agents] [--commit MSG] [--push] [--keep-source]
+#   asset-sync.sh from-repo --src REPO_SUBPATH [--dest DIR] [--commit MSG] [--push] [--delete-repo-copy]
 set -euo pipefail
 
 MY_TOOLS_ROOT="${MY_TOOLS_ROOT:-$HOME/dev/slpt/my-tools}"
-CURSOR_SKILLS_GLOBAL="${CURSOR_SKILLS_GLOBAL:-$HOME/.cursor/skills}"
-CURSOR_RULES_GLOBAL="${CURSOR_RULES_GLOBAL:-$HOME/.cursor/rules}"
-CURSOR_AGENTS_GLOBAL="${CURSOR_AGENTS_GLOBAL:-$HOME/.cursor/agents}"
-CODEX_SKILLS_GLOBAL="${CODEX_SKILLS_GLOBAL:-$HOME/.codex/skills}"
+SKILLS_GLOBAL="${SKILLS_GLOBAL:-$HOME/.cursor/skills}"
+RULES_GLOBAL="${RULES_GLOBAL:-$HOME/.cursor/rules}"
+AGENTS_GLOBAL="${AGENTS_GLOBAL:-$HOME/.cursor/agents}"
+ARCHIVED_SKILLS_GLOBAL="${ARCHIVED_SKILLS_GLOBAL:-$HOME/.codex/skills}"
 
 realpath_portable() {
   local p="$1"
@@ -22,19 +22,19 @@ realpath_portable() {
 
 detect_bucket_from_src() {
   local src_resolved="$1"
-  local skills_r rules_r agents_r codex_r
-  skills_r="$(realpath_portable "$CURSOR_SKILLS_GLOBAL")"
-  rules_r="$(realpath_portable "$CURSOR_RULES_GLOBAL")"
-  agents_r="$(realpath_portable "$CURSOR_AGENTS_GLOBAL")"
-  codex_r="$(realpath_portable "$CODEX_SKILLS_GLOBAL")"
+  local skills_r rules_r agents_r archived_r
+  skills_r="$(realpath_portable "$SKILLS_GLOBAL")"
+  rules_r="$(realpath_portable "$RULES_GLOBAL")"
+  agents_r="$(realpath_portable "$AGENTS_GLOBAL")"
+  archived_r="$(realpath_portable "$ARCHIVED_SKILLS_GLOBAL")"
   case "$src_resolved" in
-    "$codex_r"/*) echo "archived" ;;
+    "$archived_r"/*) echo "archived" ;;
     "$skills_r"/*) echo "skills" ;;
     "$rules_r"/*) echo "rules" ;;
     "$agents_r"/*) echo "agents" ;;
     *)
       echo "error: could not infer --bucket from source path: $src_resolved" >&2
-      echo "  expected under one of: $codex_r, $skills_r, $rules_r, $agents_r" >&2
+      echo "  expected under one of: $archived_r, $skills_r, $rules_r, $agents_r" >&2
       echo "  pass --bucket explicitly." >&2
       exit 1
       ;;
@@ -43,21 +43,21 @@ detect_bucket_from_src() {
 
 usage() {
   cat >&2 <<'EOF'
-cursor-asset-sync.sh to-repo --src PATH [options]
+asset-sync.sh to-repo --src PATH [options]
   --under REL          Subfolder inside the bucket (e.g. Legacy)
-  --bucket KIND        skills | archived | rules | agents | auto (default auto)
+  --bucket KIND        skills | dotagents-skills | archived | rules | agents | auto (default auto)
   --commit MSG         git commit -m MSG (repo root); skipped if nothing staged
   --push               git push from repo root
   --keep-source        Do not delete source after successful copy (default: delete = move)
 
-cursor-asset-sync.sh from-repo --src REPO_SUBPATH [options]
-  REPO_SUBPATH         e.g. skills/Legacy/foo or archived/Legacy/foo or rules/bar.mdc
+asset-sync.sh from-repo --src REPO_SUBPATH [options]
+  REPO_SUBPATH         e.g. skills/Legacy/foo, .agents/skills/foo, archived/Legacy/foo, rules/bar.mdc
   --dest DIR           Override destination parent (file targets need full file path for rules/agents)
   --commit MSG         git commit after deletion from repo (only with --delete-repo-copy)
   --push               git push  --delete-repo-copy   Remove from repo after copying to global (dangerous; off by default)
 
-Global env overrides: MY_TOOLS_ROOT, CURSOR_SKILLS_GLOBAL, CURSOR_RULES_GLOBAL,
- CURSOR_AGENTS_GLOBAL, CODEX_SKILLS_GLOBAL
+Global env overrides: MY_TOOLS_ROOT, SKILLS_GLOBAL, RULES_GLOBAL, AGENTS_GLOBAL,
+ ARCHIVED_SKILLS_GLOBAL
 EOF
   exit 1
 }
@@ -158,7 +158,17 @@ to_repo() {
   fi
 
   base_name="$(basename "$src_resolved")"
-  if [[ -n "$UNDER" ]]; then
+  if [[ "$BUCKET" == "dotagents-skills" ]]; then
+    if [[ -n "$UNDER" ]]; then
+      UNDER="${UNDER#/}"
+      UNDER="${UNDER%/}"
+      dest_dir="${MY_TOOLS_ROOT}/.agents/skills/${UNDER}/${base_name}"
+      rel_git_path=".agents/skills/${UNDER}/${base_name}"
+    else
+      dest_dir="${MY_TOOLS_ROOT}/.agents/skills/${base_name}"
+      rel_git_path=".agents/skills/${base_name}"
+    fi
+  elif [[ -n "$UNDER" ]]; then
     UNDER="${UNDER#/}"
     UNDER="${UNDER%/}"
     dest_dir="${MY_TOOLS_ROOT}/${BUCKET}/${UNDER}/${base_name}"
@@ -168,7 +178,7 @@ to_repo() {
     rel_git_path="${BUCKET}/${base_name}"
   fi
 
-  if [[ "$BUCKET" == "skills" || "$BUCKET" == "archived" ]]; then
+  if [[ "$BUCKET" == "skills" || "$BUCKET" == "dotagents-skills" || "$BUCKET" == "archived" ]]; then
     if [[ ! -d "$src_resolved" ]]; then
       echo "error: skill source must be a directory: $src_resolved" >&2
       exit 1
@@ -227,20 +237,23 @@ from_repo() {
     dest="$DEST_OVERRIDE"
   else
     case "$SRC" in
+      .agents/skills/*)
+        dest="${SKILLS_GLOBAL}/${SRC#.agents/skills/}"
+        ;;
       skills/*|archived/*)
         local sub="${SRC#*/}"
         sub="${sub#*/}"
         if [[ "$SRC" == skills/* ]]; then
-          dest="${CURSOR_SKILLS_GLOBAL}/${sub}"
+          dest="${SKILLS_GLOBAL}/${sub}"
         else
-          dest="${CODEX_SKILLS_GLOBAL}/${sub}"
+          dest="${ARCHIVED_SKILLS_GLOBAL}/${sub}"
         fi
         ;;
       rules/*)
-        dest="${CURSOR_RULES_GLOBAL}/${SRC#rules/}"
+        dest="${RULES_GLOBAL}/${SRC#rules/}"
         ;;
       agents/*)
-        dest="${CURSOR_AGENTS_GLOBAL}/${SRC#agents/}"
+        dest="${AGENTS_GLOBAL}/${SRC#agents/}"
         ;;
       *)
         echo "error: cannot infer --dest from REPO_SUBPATH; use --dest" >&2
