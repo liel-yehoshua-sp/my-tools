@@ -1,43 +1,63 @@
 ---
+name: algorithmic-complexity
+description: >-
+  Algorithmic complexity knowledge: quadratic or worse loops, redundant passes,
+  data structure choice, unnecessary sorting, missing short-circuits, and
+  exponential recursion without memoization. Use when choosing algorithms,
+  refactoring hot paths, estimating scale limits, or explaining why runtime
+  grows with input size.
+---
 
-## name: algorithmic-complexity
+# Algorithmic complexity
 
-description: Detect algorithmic complexity issues, O(n²) bottlenecks, and performance risks. Use when reviewing code changes, examining implementation plans, or when the user asks for a performance review related to complexity and algorithms.
+Reference for **asymptotic behavior and common accidental regressions**.
 
-# Algorithmic Complexity Reviewer
+## Core ideas
 
-This skill serves as a reference for detecting performance issues related to Algorithmic Complexity.
+- **Count nested dependence**: if an inner operation scales with input, multiply complexities honestly (e.g. `Contains` in a loop over another collection).
+- **Right structure for the operation**: lookups, order-statistics, and range queries have different best choices (hash map, tree, prefix sums, etc.).
+- **Sort once, or not at all**: repeated sorting inside loops is a frequent smell.
 
-## Input Modes
+## Patterns to recognize
 
-The user will provide code or an implementation plan, along with one of two modes:
+### Unnecessary O(n²) or worse
 
-- **"review plan"**: Evaluate algorithmic risks in the proposed approach and suggest alternatives.
-- **"review changes"**: Point to specific lines or patterns in the provided code with concrete fixes.
+- **Signals**: Nested iterations over the same or related collections where O(n) or O(n log n) exists (hash map/set, two-pointer, monotonic stack, etc.).
+- **Practices**: Restructure to single pass, index one collection first, or use appropriate auxiliary structure.
 
-## Issues to Detect
+### Redundant passes
 
-Analyze the input and identify the following issues:
+- **Signals**: Multiple full scans when one merged pass can compute all needed aggregates.
+- **Practices**: Combine conditions and accumulators in a single iteration when dependencies allow.
 
-- **Unnecessary O(n²) or worse loops**: Nested iterations over the same or related collections where an O(n) or O(n log n) solution exists.
-- **Redundant repeated iterations**: Iterating over the same collection multiple times when the logic could be merged into a single pass.
-- **Wrong data structure choice**: For example, using an array/list for lookups (O(n)) where a set or hash map would provide O(1) lookups.
-- **Unnecessary or repeated sorting**: Sorting data when it's not required for the logic, or sorting inside loops instead of once outside.
-- **Missing early exits / short-circuits**: Continuing to iterate or process after the required condition or answer has already been found.
-- **Exponential recursive blowup**: Recursive solutions that solve overlapping subproblems without memoization or dynamic programming.
+### Wrong data structure
 
-## Output Format
+- **Signals**: Array/list membership checks in hot inner loops; frequent middle deletes on arrays; priority needed but using unsorted scan.
+- **Practices**: `HashSet`/map for membership O(1); deque/linked structure when middle edit patterns matter; heap when you need repeated min/max of a dynamic set.
 
-Output each finding clearly, adhering to the following structure:
+### Unnecessary or misplaced sorting
 
-- **Severity**: [Critical / Warning / Info]
-- **Location**: Specific lines for "review changes" mode, or the relevant architectural component for "review plan" mode.
-- **Issue**: A clear description of the algorithmic complexity problem and why it degrades performance.
-- **Suggested Fix**: A concrete alternative implementation, algorithm, or data structure.
+- **Signals**: Sorting when only min/max or top-k needed; sorting inside a loop instead of once outside.
+- **Practices**: Linear selection or heap for top-k; sort once after all mutations; partial sort only if API supports it cheaply.
 
-### Example Output
+### Missing early exit
 
-- **Severity**: Warning
-- **Location**: Lines 45-52 (or "User processing module")
-- **Issue**: O(n²) loop due to `list.Contains()` inside a `foreach` loop. Lookups in a list take O(n) time, making the overall complexity O(n*m).
-- **Suggested Fix**: Convert `list` to a `HashSet` (or equivalent map/set) before the loop to achieve O(1) lookups and O(n) overall complexity.
+- **Signals**: Continuing full scan after answer is known; processing all elements when boolean short-circuit suffices.
+- **Practices**: Break/return as soon as predicate satisfied; branch reorder for cheap checks first.
+
+### Exponential recursion without memoization
+
+- **Signals**: Overlapping subproblems in naive recursion (Fibonacci-style, partition problems).
+- **Practices**: DP table, memoization, or iterative bottom-up; prove subproblem count is bounded.
+
+## Risk prioritization
+
+| Level | Examples |
+|-------|----------|
+| **High** | Hot path with O(n²) or worse at production n; exponential recursion on user-sized input |
+| **Medium** | Clear linearithmic upgrade available; repeated sorts/passes on large collections |
+| **Lower** | Small-n domains where constants dominate; theoretical improvements without practical impact |
+
+## Using this knowledge
+
+State **n** (and multiple dimensions if several inputs). Give **concrete** structure changes (e.g. “build `HashSet` once, then single pass”). When parallelizing or distributing, complexity across machines still follows the algorithm unless work is perfectly partitioned.
