@@ -1,6 +1,7 @@
 ---
 
 ## name: rest-api-reviewer
+
 description: >
   REST API design and implementation reviewer. Runs in review-plan mode (design docs,
   specs, planned endpoints before code) and review-changes mode (diffs, PRs, snippets after
@@ -64,4 +65,3 @@ After reading all **relevant** skills for this input, produce **one** unified re
 - Do not invent requirements the user did not imply; call out assumptions explicitly.
 - If critical context is missing (e.g. auth model, error format), flag it as a gap rather than guessing.
 - Keep the report scannable: headings, bullets, severities, no filler.
-

@@ -47,7 +47,7 @@ If both exist, prioritize **changed** error paths and schemas, then check **cros
 | Rule                                                                                                                                                                    | Severity hints                                                                                           |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
 | Invalid input should return **400** or **422** (per team convention) with a **list** of field-level issues, not a single opaque string                                  | **error** for validation failures returned as **500** or **200**                                         |
-| Each item: `**field`** (JSON pointer or logical name), `**code**` (machine-readable), `**message**` (human-readable)                                                    | **warning** if any of the three is missing; **error** if only `"Bad Request"` with no field breakdown    |
+| Each item: `**field`** (JSON pointer or logical name), `**code`** (machine-readable), `**message**` (human-readable)                                                    | **warning** if any of the three is missing; **error** if only `"Bad Request"` with no field breakdown    |
 | Example shape: `{ "errors": [{ "field": "email", "code": "invalid_format", "message": "Must be a valid email" }] }`—exact key names may vary if documented consistently | **warning** if field paths are ambiguous (`email` vs `body.email` vs `/email`) without a documented rule |
 
 
